@@ -1,60 +1,52 @@
 import json
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import joblib
-import os
+import pandas as pd
 
-# Load config
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+
 with open("config.json") as f:
     config = json.load(f)
 
-# Load dataset
-df = pd.read_csv("dataset/train.csv")
-X = df.drop('label', axis=1)
-y = df['label']
+student_id = config["student_id"]
+dataset_version = config["dataset_version"]
+model_type = config["model_type"]
 
-# Split data
+df = pd.read_csv("dataset/train.csv")
+X = df.drop("label", axis=1)
+y = df["label"]
+
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=config.get("seed", 42)
+    X, y, test_size=0.2, random_state=42
 )
 
-# Train model
-print("Training model...")
-model = LogisticRegression(random_state=42, max_iter=1000)
+if model_type == "logistic_regression":
+    model = LogisticRegression(max_iter=1000)
+elif model_type == "random_forest":
+    model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+elif model_type == "decision_tree":
+    model = DecisionTreeClassifier(max_depth=5, random_state=42)
+else:
+    raise Exception(f"Unsupported model_type: {model_type}")
+
 model.fit(X_train, y_train)
+predictions = model.predict(X_test)
+accuracy = accuracy_score(y_test, predictions)
 
-# Evaluate
-y_pred = model.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-precision = precision_score(y_test, y_pred, average='weighted', zero_division=0)
-recall = recall_score(y_test, y_pred, average='weighted', zero_division=0)
-f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+joblib.dump(model, "model.pkl")
 
-# Save metrics
 metrics = {
-    "accuracy": float(accuracy),
-    "precision": float(precision),
-    "recall": float(recall),
-    "f1_score": float(f1)
+    "student_id": student_id,
+    "dataset_version": dataset_version,
+    "model_type": model_type,
+    "accuracy": round(float(accuracy), 4),
+    "samples": len(df)
 }
 
-# Create models directory
-os.makedirs("models", exist_ok=True)
+with open("metrics.json", "w") as f:
+    json.dump(metrics, f, indent=4)
 
-# Save model
-joblib.dump(model, "models/model.pkl")
-
-# Save metrics
-with open("models/metrics.json", "w") as f:
-    json.dump(metrics, f, indent=2)
-
-print(f"\n✓ Model trained successfully!")
-print(f"  Accuracy:  {accuracy:.4f}")
-print(f"  Precision: {precision:.4f}")
-print(f"  Recall:    {recall:.4f}")
-print(f"  F1-Score:  {f1:.4f}")
-print(f"\nModel saved to: models/model.pkl")
-print(f"Metrics saved to: models/metrics.json")
+print(f"Trained {model_type} | accuracy: {accuracy:.4f} | samples: {len(df)}")
